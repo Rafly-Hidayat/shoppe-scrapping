@@ -67,7 +67,7 @@ def scrape_shopee(keyword: str, top_n: int = 3):
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=True,
-                args=_CHROMIUM_ARGS,
+                args=_CHROMIUM_ARGS + ["--ignore-certificate-errors"],
             )
             try:
                 proxy = _proxy_for_context()
@@ -78,6 +78,7 @@ def scrape_shopee(keyword: str, top_n: int = 3):
                         "Chrome/131.0.0.0 Safari/537.36"
                     ),
                     "locale": "id-ID",
+                    "ignore_https_errors": True,
                     "timezone_id": "Asia/Jakarta",
                     "viewport": {"width": 1920, "height": 1080},
                 }
