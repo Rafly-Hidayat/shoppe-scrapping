@@ -1,0 +1,9 @@
+# Blueprint Render: https://render.com/docs/blueprint-spec
+# Setelah push, tautkan repo di Render → gunakan repo ini (detect render.yaml).
+services:
+  - type: web
+    name: shopee-scraper
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free

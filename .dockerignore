@@ -1,0 +1,9 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+.pw-browsers
+.venv
+venv
+.env
+*.md
