@@ -1,10 +1,38 @@
-from urllib.parse import quote
+import os
+import time
+from urllib.parse import quote, urlparse
 
 from flask import Flask, render_template, request, jsonify
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
 app = Flask(__name__)
+
+# Di VPS/cloud (Render, dll.) IP sering ditolak Shopee (error 90309999). Set proxy residential jika perlu:
+# PLAYWRIGHT_PROXY=http://user:pass@host:port
+_PLAYWRIGHT_PROXY = os.environ.get("PLAYWRIGHT_PROXY", "").strip()
+
+_CHROMIUM_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    # Wajib umum di container Linux (Docker / Render)
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+]
+
+
+def _proxy_for_context():
+    if not _PLAYWRIGHT_PROXY:
+        return None
+    parsed = urlparse(_PLAYWRIGHT_PROXY)
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    server = f"{parsed.scheme}://{parsed.hostname}:{port}"
+    conf = {"server": server}
+    if parsed.username:
+        conf["username"] = parsed.username
+    if parsed.password:
+        conf["password"] = parsed.password
+    return conf
 
 
 def scrape_shopee(keyword: str, top_n: int = 3):
@@ -14,34 +42,54 @@ def scrape_shopee(keyword: str, top_n: int = 3):
     Results are sorted by lowest price locally (API is called with relevancy by the page).
     """
     search_url = f"https://shopee.co.id/search?keyword={quote(keyword)}"
+    state = {"payload": None, "risk_error": None}
+
+    def on_response(response):
+        if state["payload"] is not None:
+            return
+        if "search_items" not in response.url or response.status != 200:
+            return
+        try:
+            payload = response.json()
+        except Exception:
+            return
+        err = payload.get("error")
+        if err not in (None, 0):
+            if err == 90309999:
+                state["risk_error"] = 90309999
+            return
+        items = payload.get("items") or []
+        if not items:
+            return
+        state["payload"] = payload
 
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=True,
-                args=["--disable-blink-features=AutomationControlled"],
+                args=_CHROMIUM_ARGS,
             )
             try:
-                context = browser.new_context(
-                    user_agent=(
+                proxy = _proxy_for_context()
+                context_kw = {
+                    "user_agent": (
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                         "AppleWebKit/537.36 (KHTML, like Gecko) "
                         "Chrome/131.0.0.0 Safari/537.36"
                     ),
-                    locale="id-ID",
-                    viewport={"width": 1920, "height": 1080},
-                )
+                    "locale": "id-ID",
+                    "timezone_id": "Asia/Jakarta",
+                    "viewport": {"width": 1920, "height": 1080},
+                }
+                if proxy:
+                    context_kw["proxy"] = proxy
+                context = browser.new_context(**context_kw)
                 page = context.new_page()
-                with page.expect_response(
-                    lambda r: "search_items" in r.url and r.status == 200,
-                    timeout=90_000,
-                ) as resp_info:
-                    page.goto(
-                        search_url,
-                        wait_until="domcontentloaded",
-                        timeout=90_000,
-                    )
-                data = resp_info.value.json()
+                page.on("response", on_response)
+                page.goto(search_url, wait_until="domcontentloaded", timeout=90_000)
+                deadline = time.time() + 75.0
+                while time.time() < deadline and state["payload"] is None:
+                    page.wait_for_timeout(400)
             finally:
                 browser.close()
     except PlaywrightTimeout:
@@ -50,6 +98,17 @@ def scrape_shopee(keyword: str, top_n: int = 3):
         )
     except Exception as e:
         raise RuntimeError(f"Gagal mengambil data dari Shopee: {e}")
+
+    data = state["payload"]
+    if data is None:
+        if state["risk_error"] == 90309999:
+            raise RuntimeError(
+                "Shopee memblokir permintaan (90309999). Server hosting sering memakai IP data center "
+                "yang ditandai. Lokal biasanya aman karena IP rumah/kantor."
+            )
+        raise RuntimeError(
+            "Tidak ada data pencarian dari Shopee. Coba lagi atau periksa keyword."
+        )
 
     err = data.get("error")
     if err not in (None, 0):
