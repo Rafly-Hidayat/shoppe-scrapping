@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shopee Scraper</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 680px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .header .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .header .logo svg {
+      width: 38px;
+      height: 38px;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #ee4d2d;
+    }
+
+    .header p {
+      color: #777;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    .search-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 24px;
+    }
+
+    .search-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .search-input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-input:focus { border-color: #ee4d2d; }
+
+    .search-btn {
+      padding: 12px 24px;
+      background: #ee4d2d;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .search-btn:hover { background: #d43f1f; }
+    .search-btn:active { transform: scale(0.97); }
+    .search-btn:disabled { background: #f0a090; cursor: not-allowed; }
+
+    /* Results */
+    .results-header {
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 12px;
+      padding: 0 4px;
+    }
+
+    .results-header span { color: #ee4d2d; font-weight: 600; }
+
+    .product-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px 24px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+      margin-bottom: 14px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      animation: fadeIn 0.3s ease both;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .rank-badge {
+      min-width: 34px;
+      height: 34px;
+      background: #ee4d2d;
+      color: #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 15px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .product-info { flex: 1; min-width: 0; }
+
+    .product-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #222;
+      margin-bottom: 6px;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .product-price {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ee4d2d;
+      margin-bottom: 10px;
+    }
+
+    .product-link a {
+      color: #1a73e8;
+      font-size: 13px;
+      text-decoration: none;
+      word-break: break-all;
+    }
+
+    .product-link a:hover { text-decoration: underline; }
+
+    /* States */
+    .loading, .error-msg, .empty-msg {
+      text-align: center;
+      padding: 40px 20px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+    }
+
+    .loading { color: #999; font-size: 15px; }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #f0e0de;
+      border-top-color: #ee4d2d;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg { color: #c0392b; }
+    .error-msg .icon { font-size: 32px; margin-bottom: 8px; }
+    .empty-msg { color: #888; }
+    .empty-msg .icon { font-size: 32px; margin-bottom: 8px; }
+
+    #output { display: none; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="logo">
+      <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="80" height="80" rx="16" fill="#ee4d2d"/>
+        <path d="M40 16C30.6 16 23 23.6 23 33c0 6.2 3.3 11.7 8.3 14.8L29 60h22l-2.3-12.2C53.7 44.7 57 39.2 57 33c0-9.4-7.6-17-17-17z" fill="white"/>
+        <circle cx="33" cy="32" r="3" fill="#ee4d2d"/>
+        <circle cx="47" cy="32" r="3" fill="#ee4d2d"/>
+      </svg>
+      <h1>Shopee Scraper</h1>
+    </div>
+    <p>Temukan 3 produk dengan harga terendah di Shopee</p>
+  </div>
+
+  <div class="search-card">
+    <div class="search-row">
+      <input
+        class="search-input"
+        type="text"
+        id="keywordInput"
+        placeholder="Masukkan keyword (contoh: Compressor)"
+        autocomplete="off"
+      />
+      <button class="search-btn" id="searchBtn" onclick="doSearch()">Cari</button>
+    </div>
+  </div>
+
+  <div id="output"></div>
+
+</div>
+
+<script>
+  const input = document.getElementById('keywordInput');
+  const output = document.getElementById('output');
+  const btn = document.getElementById('searchBtn');
+
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+  async function doSearch() {
+    const keyword = input.value.trim();
+    if (!keyword) { input.focus(); return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Mencari...';
+    output.style.display = 'block';
+    output.innerHTML = `
+      <div class="loading">
+        <div class="spinner"></div>
+        Sedang mengambil data dari Shopee...
+      </div>`;
+
+    try {
+      const res = await fetch('/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword })
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        output.innerHTML = `
+          <div class="error-msg">
+            <div class="icon">⚠️</div>
+            <strong>Gagal:</strong> ${data.error || 'Terjadi kesalahan.'}
+          </div>`;
+        return;
+      }
+
+      if (!data.results?.length) {
+        output.innerHTML = `
+          <div class="empty-msg">
+            <div class="icon">🔍</div>
+            Tidak ada produk ditemukan untuk "<strong>${keyword}</strong>".
+          </div>`;
+        return;
+      }
+
+      let html = `<div class="results-header">
+        Menampilkan <span>${data.results.length} produk termurah</span> untuk "<strong>${keyword}</strong>"
+      </div>`;
+
+      data.results.forEach((p, i) => {
+        html += `
+          <div class="product-card" style="animation-delay:${i * 0.08}s">
+            <div class="rank-badge">${i + 1}</div>
+            <div class="product-info">
+              <div class="product-name">${escHtml(p.name)}</div>
+              <div class="product-price">${escHtml(p.price_formatted)}</div>
+              <div class="product-link">
+                <a href="${escHtml(p.link)}" target="_blank" rel="noopener">${escHtml(p.link)}</a>
+              </div>
+            </div>
+          </div>`;
+      });
+
+      output.innerHTML = html;
+
+    } catch (err) {
+      output.innerHTML = `
+        <div class="error-msg">
+          <div class="icon">⚠️</div>
+          Koneksi gagal. Pastikan server berjalan dengan benar.
+        </div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Cari';
+    }
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>
